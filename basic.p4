@@ -108,6 +108,10 @@ control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadat
 	} 
 
 	apply {
+		if (hdr.ipv4.isValid()) {
+            ipv4_lpm.apply();
+        }
+    
 		if (hdr.ethernet.dstAddr == BROADCAST_MAC) {
 			forward(255, hdr.ethernet.srcAddr); //ARP
 			
@@ -116,6 +120,27 @@ control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadat
 			forwarding_table.apply();
 		}
 	}
+
+	action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
+        standard_metadata.egress_spec = port;
+        hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
+        hdr.ethernet.dstAddr = dstAddr;
+        hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
+    }
+
+    table ipv4_lpm {
+        key = {
+            hdr.ipv4.dstAddr: lpm;
+        }
+        actions = {
+            ipv4_forward;
+            drop;
+            NoAction;
+        }
+        size = 1024;
+        default_action = drop();
+    }
+
 	
 }
 
