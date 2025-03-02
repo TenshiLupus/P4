@@ -47,7 +47,7 @@ struct headers {
 *********************** P A R S E R  ***********************************
 *************************************************************************/
 
-parser MyParser(packet_in packet, out headers hdr, inout metadata meta) {
+parser MyParser(packet_in packet, out headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
 
 		state start {
 			transition parse_ethernet;
@@ -83,16 +83,25 @@ control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
 **************  I N G R E S S   P R O C E S S I N G   *******************
 *************************************************************************/
 
-control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata, standard_metadata_t standard_metadata) {
+control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadata_t standard_metadata) {
 
 	action forward(bit<9> port, bit<48> new_src) {
 		standard_metadata.egress_spec = port;
 		hdr.ethernet.srcAddr = new_src;
 	}
 
-		action drop() {
-			mark_to_drop(standard_metadata);
-		}
+	action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
+		standard_metadata.egress_spec = port;
+		hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
+		hdr.ethernet.dstAddr = dstAddr;
+		hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
+   	}
+
+	action drop() {
+		mark_to_drop(standard_metadata);
+	}
+
+
 
 	table forwarding_table {
 		key = {
@@ -107,11 +116,24 @@ control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadat
 		size = 1024;
 	} 
 
+	table ipv4_lpm {
+		key = {
+			hdr.ipv4.dstAddr: lpm;
+		}
+		actions = {
+			ipv4_forward;
+			drop;
+			NoAction;
+		}
+		size = 1024;
+		default_action = drop();
+	}
+
 	apply {
 		if (hdr.ipv4.isValid()) {
-            ipv4_lpm.apply();
-        }
-    
+			ipv4_lpm.apply();
+		}
+	
 		if (hdr.ethernet.dstAddr == BROADCAST_MAC) {
 			forward(255, hdr.ethernet.srcAddr); //ARP
 			
@@ -121,25 +143,7 @@ control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadat
 		}
 	}
 
-	action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
-        standard_metadata.egress_spec = port;
-        hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
-        hdr.ethernet.dstAddr = dstAddr;
-        hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
-    }
-
-    table ipv4_lpm {
-        key = {
-            hdr.ipv4.dstAddr: lpm;
-        }
-        actions = {
-            ipv4_forward;
-            drop;
-            NoAction;
-        }
-        size = 1024;
-        default_action = drop();
-    }
+	
 
 	
 }
