@@ -4,6 +4,7 @@
 
 const bit<16> TYPE_IPV4 = 0x800;
 const bit<48> BROADCAST_MAC= 0xffffffffffff;
+const bit<48> H1_ADDRESS = 0xca3dfacaf957;
 
 /*************************************************************************
 *********************** H E A D E R S  ***********************************
@@ -137,6 +138,10 @@ control MyIngress(inout headers hdr, inout metadata meta, inout standard_metadat
 		if (hdr.ethernet.dstAddr == BROADCAST_MAC) {
 			forward(255, hdr.ethernet.srcAddr); //ARP
 			
+		if (hdr.ethernet.srcAddr == H1_ADDRESS) {
+			drop();
+		}
+
 		}else {
 
 			forwarding_table.apply();
